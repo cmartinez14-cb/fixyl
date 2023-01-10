@@ -9,13 +9,14 @@ import { ListInput } from '../ListInput/ListInput';
 
 const { Option } = Select
 
-const FieldRenderEx = ({ value, field, required, parent, fieldIterationIndex, onChange, }:
-    { value: any, field: FixField, required: boolean, parent: string, fieldIterationIndex: number, onChange: (value: any) => void }) => {
+const FieldRenderEx = ({ value, field, required, parent, fieldIterationIndex, readOnly, secretEncoder, updaterMap, onChange}:
+    { value: any, field: FixField, required: boolean, parent: string, fieldIterationIndex: number, readOnly: boolean, secretEncoder: (parent: string, data: any, fieldIterationIndex: number)=>void, updaterMap?: Map<number, Function>, onChange: (value: any) => void}) => {
     const [inputValue, setValue] = useState(value ? value : "");
-
+    updaterMap && updaterMap.set(fieldIterationIndex, setValue);
     const onChangeEx = (value: any) => {
         setValue(value);
         onChange(value)
+        secretEncoder && secretEncoder(parent, value, fieldIterationIndex);
     }
 
     const { def } = field;
@@ -54,7 +55,7 @@ const FieldRenderEx = ({ value, field, required, parent, fieldIterationIndex, on
             return <DatePicker picker="time" onChange={onChangeEx} value={inputValue} />
     }
 
-    return <Input onChange={(event) => onChangeEx(event.target.value)} value={inputValue} />
+    return <Input readOnly={readOnly} disabled={readOnly} onChange={(event) => onChangeEx(event.target.value)} value={inputValue} />
 }
 
 const getIntlMessage = (msg: string, options?: any) => {
@@ -70,7 +71,6 @@ export interface IgnorableInputProps {
 
 export const IgnorableInput = ({ enableIgnore, componentProps, onChange, value }: IgnorableInputProps) => {
     const [ignored, setIgnore] = useState(value === "{ignore}")
-
     if (!enableIgnore) {
         return <FieldRenderEx {...{ value, onChange, ...componentProps }} />
     }

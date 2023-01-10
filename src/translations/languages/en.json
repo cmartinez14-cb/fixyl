@@ -36,7 +36,8 @@
 		"target_comp_id": "TargetCompID",
 		"fix_version_selector": "FIX Version",
 		"copy": "Copy",
-		"edit": "Edit"
+		"edit": "Edit",
+		"api_secret": "API Secret"
 	},
 	"settings": {
 		"title": "Settings",
@@ -112,7 +113,8 @@
 		"fav_delete_success_title": "Favorite Deletion",
 		"fav_delete_success": "{ name } has been deleted successfully ",
 		"fav_delete_failed_title": "Favorite Deletion",
-		"fav_delete_failed": "Error occurred whilte deleting the favorite"
+		"fav_delete_failed": "Error occurred whilte deleting the favorite",
+		"api_secret": "API Secret"
 	},
 	"session_message_view": {
 		"title": "Message View",

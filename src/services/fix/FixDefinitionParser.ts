@@ -1,7 +1,8 @@
-import { removeFalsyKeys } from "src/utils/utils";
-import { GlobalServiceRegistry } from "../GlobalServiceRegistry";
-import { FixVersion } from "../profile/ProfileDefs";
-import { FixXmlNode, FixFieldDef, FixComplexType, FixField } from "./FixDefs";
+import {removeFalsyKeys} from "src/utils/utils";
+import {GlobalServiceRegistry} from "../GlobalServiceRegistry";
+import {FixVersion} from "../profile/ProfileDefs";
+import {FixComplexType, FixField, FixFieldDef, FixXmlNode} from "./FixDefs";
+
 const parser = require('xml-reader');
 
 export type FixMessageDef = FixComplexType;
@@ -193,7 +194,7 @@ export class FixDefinitionParser {
         return checksum;
     }
 
-    private encodeToFixBody(data: any, parameters?: any) {
+    private encodeToFixBody(data: any, parameters?: any, headerOw?: Map<string, any>) {
         removeFalsyKeys(data);
         const properties = Object.keys(data);
         let fixMsgBody = "";
@@ -205,16 +206,20 @@ export class FixDefinitionParser {
                     const arrayData = data[property] as any[];
                     fixMsgBody += `${def.number}=${arrayData.length}${SOH}`;
                     arrayData.forEach(inst => {
-                        fixMsgBody += this.encodeToFixBody(inst, parameters)
+                        fixMsgBody += this.encodeToFixBody(inst, parameters, headerOw);
                     })
                 } else {
                     const fielData = def.formatValueToPack(data[property], parameters);
-                    fixMsgBody += `${def.number}=${fielData}${SOH}`
+                    if (this.headerFields.has(def.name) && headerOw) {
+                        headerOw.set(def.number, fielData);
+                    } else {
+                        fixMsgBody += `${def.number}=${fielData}${SOH}`;
+                    }
                 }
             } else {
                 def = this.componentMap.get(property);
                 if (def) {
-                    fixMsgBody += this.encodeToFixBody(data[property], parameters);
+                    fixMsgBody += this.encodeToFixBody(data[property], parameters, headerOw);
                 }
             }
         })
@@ -266,9 +271,13 @@ export class FixDefinitionParser {
     }
 
     encodeToFix(data: any, header: FixMsgHeader, parameters?: any, customHeaders?: any): string {
-        const messageBody = this.encodeToFixBody(data, parameters);
+        const headerOw: Map<string, any> = new Map<string, any>();
+        const messageBody = this.encodeToFixBody(data, parameters, headerOw);
+        if (headerOw.has("52")) {
+            header.time = headerOw.get("52");
+        }
         const messageHeader = this.encodeHeader(header, customHeaders);
-        const msg = messageHeader + messageBody;
+        const msg = messageHeader + SOH + messageBody;
         let message = this.BEGIN_STRING + SOH + '9=' + msg.length + SOH + msg;
         message += '10=' + this.checksum(message) + SOH;
         return message;
@@ -309,6 +318,13 @@ export class FixDefinitionParser {
             if (tag === temp[0]) {
                 index++;
                 if (index === iterationIndex) {
+                    if (temp.length > 2) {
+                        let val: string = temp[1];
+                        for (let x = 2; x < temp.length; x++) {
+                            val += '='+temp[x];
+                        }
+                        return val;
+                    }
                     return temp[1];
                 }
             }

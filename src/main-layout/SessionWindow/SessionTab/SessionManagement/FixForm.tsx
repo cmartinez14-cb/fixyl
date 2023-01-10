@@ -2,17 +2,19 @@ import {
     CloseOutlined, MinusCircleOutlined, PlusOutlined,
     SendOutlined, StarOutlined, DownOutlined, UpOutlined
 } from '@ant-design/icons';
-import { Form, Input, Button, Popover } from 'antd';
+import {Form, Input, Button, Popover, FormInstance} from 'antd';
 import moment from 'moment';
 import React, { useRef } from 'react';
 import { IgnorableInput } from 'src/common/IgnorableInput/IgnorableInput';
 import { KeyboardEventDispatcher } from 'src/common/KeyboardEventDispatcher/KeyboardEventDispatcher';
 import { Toast } from 'src/common/Toast/Toast';
-import { FixComplexType, FixField } from 'src/services/fix/FixDefs';
+import {FixComplexType, FixField} from 'src/services/fix/FixDefs';
 import { FixMessage, FixSession } from 'src/services/fix/FixSession';
 import { GlobalServiceRegistry } from 'src/services/GlobalServiceRegistry';
 import { LM } from 'src/translations/language-manager';
 import "./FixForm.scss";
+import {ProfileWithCredentials} from "../../../../services/profile/ProfileDefs";
+import CryptoJS from "crypto-js";
 
 const Mark = require("mark.js");
 
@@ -45,7 +47,7 @@ const SaveAsForm = ({ togglePopover, onAddToFavorites, name }: {
             <div className="close" onClick={() => togglePopover(false)}>✕</div>
         </div>
         <Form ref={formRef} layout="vertical" initialValues={{ name }} className="save-as-form"
-            onFinish={(values) => { 
+            onFinish={(values) => {
                 onAddToFavorites(values)
                  }}>
             <div className="form-item-container">
@@ -94,11 +96,12 @@ interface FixFormState {
     showSearch: boolean;
     markedItems: any[];
     currentMarkedIndex?: any;
+    updaterMap: Map<number, Function>;
 }
 
 export class FixForm extends React.Component<FixFormProps, FixFormState> {
     fieldIterationIndex = 0;
-    private formRef: any = React.createRef();
+    private formRef: any = React.createRef<FormInstance>();
     private markInstance: any;
     private martkUpdateTimeout: any;
 
@@ -109,7 +112,8 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
             saving: false,
             confirmVisible: false,
             showSearch: false,
-            markedItems: []
+            markedItems: [],
+            updaterMap: new Map<number, Function>()
         }
     }
 
@@ -121,6 +125,103 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
                 this.setState({ initialized: true })
             }, 10)
         }
+    }
+
+
+    private getFieldRender = (field: FixField, required: boolean, parent: string, fieldIterationIndex: number, readOnly: boolean, secretEncoder?: (parent: string, data: any, fieldIterationIndex: number)=>void, updaterMap?: Map<number, Function>) => {
+        const { enableIgnore } = this.props;
+        return <IgnorableInput enableIgnore={enableIgnore} componentProps={{ field, required, parent, fieldIterationIndex, readOnly, secretEncoder, updaterMap }}  />
+    }
+
+    secretEncoder = (parent: string, data: any, fieldIterationIndex: number): void => {
+        let timestamp: string = moment(data).format("YYYY-MM-DD HH:mm:ss.mmss")
+        if (this.state.updaterMap && this.state.updaterMap.has(fieldIterationIndex)) {
+            let profile: ProfileWithCredentials = this.props.session.profile;
+            let firstPart: string = timestamp+profile.senderCompId+profile.targetCompId+profile.password;
+            console.log(firstPart);
+            let encodedKey = CryptoJS.enc.Utf8.parse(profile.apiKeySecret?? '');
+            console.log(encodedKey);
+            let encrypted_secret = CryptoJS.HmacSHA256(firstPart, encodedKey);
+            let setValueFunc = this.state.updaterMap.get(fieldIterationIndex);
+            setValueFunc && setValueFunc(encrypted_secret);
+        }
+    }
+
+    renderFields = (message: FixMessage, level: number, fieldIterationIndex: number, parent: string) => {
+        return <div className="fix-field-wrapper" style={{ marginLeft: level * 10 }}>
+            {message.fields.map((field, i) => {
+                const { def } = field;
+                const fieldName = `${parent}__${def.name}__${fieldIterationIndex}`;
+                let readOnly: boolean =  ('A' === message.id && "58" === field.def.number);
+                let encodesSecret: boolean = ('A' === message.id && "52" === field.def.number);
+
+                if (this.props.removeNonFilledFields) {
+                    const initialValues = this.getInitialValues();
+                    if (initialValues[fieldName] === undefined) {
+                        return null
+                    }
+                }
+
+                return <Form.Item name={fieldName} label={<span>{def.name}<span className="field-number">[{def.number}]</span></span>}
+                    rules={[{ required: field.required, message: 'Please input valid value!' }]} key={i} >
+                    {this.getFieldRender(field, field.required, parent, fieldIterationIndex, readOnly, encodesSecret ? this.secretEncoder : undefined, this.state.updaterMap)}
+                </Form.Item>
+
+            })}
+        </div>
+    }
+
+    renderGroups = (group: FixComplexType, level: number, parent: string) => {
+        const newLevel = level++;
+        if (!group.groupInstances[parent]) {
+            if (group.required) {
+                group.groupInstances[parent] = [{}];
+            } else {
+                group.groupInstances[parent] = [];
+            }
+        }
+
+        const remove = (index: number) => {
+            const array = group.groupInstances[parent];
+            array.splice(index, 1);
+            group.groupInstances[parent] = [...array];
+            this.forceUpdate();
+        }
+
+        return <div className="fix-group" style={{ marginLeft: level * 10 }}>
+            <div className="fix-group-title">{getIntlMessage("group", { type: `${group.name} [${group.id}]` })}
+                <div className="fix-group-insert" onClick={() => {
+                    group.groupInstances[parent].push({})
+                    this.forceUpdate();
+                }}><PlusOutlined /></div></div>
+            <div className="fix-group-fields">
+                {(group.groupInstances[parent] as any[])?.map((val, i) => {
+                    return <div className="repitition-block" key={i}>
+                        <div className="repitition-block-content">
+                            {this.renderFields(group, newLevel, i, `${parent}|G:${group.name}:${i}`)}
+                            {group.group && this.renderGroups(group.group, newLevel, `${parent}|G:${group.name}:${i}`)}
+                            {group.components.map(comp => this.renderComponents(comp, newLevel, `${parent}|G:${group.name}:${i}`))}
+                        </div>
+                        <MinusCircleOutlined
+                            className="dynamic-delete-button"
+                            onClick={() => remove(i)}
+                        />
+                    </div>
+                })}
+            </div>
+        </div>
+    }
+
+    renderComponents = (component: FixComplexType, level: number, parent: string) => {
+        const newLevel = level++;
+        return <div className="fix-component" style={{ marginLeft: level * 10 }} key={component.name + newLevel}>
+            <div className="fix-component-title">{getIntlMessage("component", { type: component.name })}</div>
+            <div className="fix-component-fields">
+                {this.renderFields(component, newLevel, 0, `${parent}|C:${component.name}:0`)}
+                {component.group && this.renderGroups(component.group, newLevel, `${parent}|C:${component.name}:0`)}
+                {component.components.map(comp => this.renderComponents(comp, newLevel, `${parent}|C:${component.name}:0`))}
+            </div>
+        </div>
     }
 
     private getFieldValues = (def: FixMessage, inputData: any, namePrefix: string, fieldIterationIndex: number) => {
@@ -311,14 +412,15 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
 
     private getInitialValues() {
         const { session, value } = this.props;
-        const { hbInterval, password } = session.profile;
+        const { hbInterval, password, senderCompId } = session.profile;
         if (value) {
             return this.createFormData(value);
         }
 
         return {
             root__HeartBtInt__0: hbInterval,
-            root__Password__0: password
+            root__Password__0: password,
+            root__Username__0: senderCompId,
         };
     }
 

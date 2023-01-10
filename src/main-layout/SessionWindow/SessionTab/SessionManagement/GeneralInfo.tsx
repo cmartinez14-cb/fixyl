@@ -64,7 +64,7 @@ export class GeneralInfo extends React.Component<GeneralInfoProps, GeneralInfoSt
 
     render() {
         const { session } = this.props;
-        const { name, ip, port, senderCompId, targetCompId, } = session.profile;
+        const { name, ip, port, senderCompId, targetCompId, apiKeySecret } = session.profile;
         const { connected, hbEnabled, testRequestEnabled, showHeaderFields } = this.state;
         return <div className="general-info">
             <div className="header">
@@ -76,6 +76,7 @@ export class GeneralInfo extends React.Component<GeneralInfoProps, GeneralInfoSt
                 {this.getFieldValue(getIntlMessage("port"), port)}
                 {this.getFieldValue(getIntlMessage("sender_comp_id"), senderCompId)}
                 {this.getFieldValue(getIntlMessage("target_comp_id"), targetCompId)}
+                {this.getFieldValue(getIntlMessage("api_secret"), apiKeySecret?.substring(0, 16) + '...')}
                 {this.getFieldValue(getIntlMessage("connected_time"), session.getConnectedTime())}
                 {this.getFieldValue(getIntlMessage("state"), connected ? <div className="connected">{getIntlMessage("connect")}</div> :
                     <div className="disconnected">{getIntlMessage("disconnect")}</div>)}

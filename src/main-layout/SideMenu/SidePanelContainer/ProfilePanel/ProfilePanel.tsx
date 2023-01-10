@@ -1,19 +1,29 @@
-import { PlusOutlined, ApiOutlined } from '@ant-design/icons';
-import { Button, Collapse, Empty, FormInstance, Input, InputNumber, Select, Tooltip } from 'antd';
+import {ApiOutlined, PlusOutlined} from '@ant-design/icons';
+import {
+    Button,
+    Collapse,
+    Empty,
+    Form,
+    FormInstance,
+    Input,
+    InputNumber,
+    Select,
+    Tooltip
+} from 'antd';
 import React from 'react';
-import { LM } from 'src/translations/language-manager';
-import { BasePanel } from '../BasePanel';
-import { Form } from "antd";
+import {LM} from 'src/translations/language-manager';
+import {BasePanel} from '../BasePanel';
 import './ProfilePanel.scss';
 import Password from 'antd/lib/input/Password';
-import { GlobalServiceRegistry } from 'src/services/GlobalServiceRegistry';
-import { FileSelect } from 'src/common/FileSelect/FileSelect';
-import { FixVersion, ProfileWithCredentials } from 'src/services/profile/ProfileDefs';
-import { Subscription } from 'rxjs';
-import { NavigationPathAction } from 'src/services/navigation/NevigationService';
-import { ProfileInstance } from './ProfileInstance';
-import { deepCopyObject } from 'src/utils/utils';
+import {GlobalServiceRegistry} from 'src/services/GlobalServiceRegistry';
+import {FileSelect} from 'src/common/FileSelect/FileSelect';
+import {FixVersion, ProfileWithCredentials} from 'src/services/profile/ProfileDefs';
+import {Subscription} from 'rxjs';
+import {NavigationPathAction} from 'src/services/navigation/NevigationService';
+import {ProfileInstance} from './ProfileInstance';
+import {deepCopyObject} from 'src/utils/utils';
 import Checkbox from 'antd/lib/checkbox/Checkbox';
+import {SelectValue} from "antd/es/select";
 
 const { Option } = Select;
 const { Panel } = Collapse;
@@ -23,6 +33,7 @@ interface ProfilePanelState {
     profiles: ProfileWithCredentials[];
     currentProfile: ProfileWithCredentials | undefined;
     requireTransportDic: boolean;
+    apiKeySecret: string;
 }
 
 const getIntlMessage = (msg: string) => {
@@ -43,7 +54,8 @@ export class ProfilePanel extends React.Component<any, ProfilePanelState> {
             profiles: GlobalServiceRegistry.profile.getAllProfiles(),
             currentProfile: undefined,
             isNewForm: true,
-            requireTransportDic: false
+            requireTransportDic: false,
+            apiKeySecret: ''
         }
     }
 
@@ -124,15 +136,23 @@ export class ProfilePanel extends React.Component<any, ProfilePanelState> {
         </Collapse>
     }
 
+    private onFixVersionChange(val: SelectValue): void {
+        let isFiveO = val === FixVersion.FIX_5;
+        this.setState({ requireTransportDic: isFiveO });
+        if (this.state.currentProfile) {
+            const copyProfile = deepCopyObject(this.state.currentProfile);
+            copyProfile.fixVersion = ( isFiveO ? FixVersion.FIX_5 : FixVersion.FIX_4 );
+            this.setState({ currentProfile: copyProfile })
+        }
+    }
+
     private getNewProfileForm = () => {
-        const { showNewForm, currentProfile, isNewForm, requireTransportDic } = this.state;
+        const { showNewForm, currentProfile, isNewForm, requireTransportDic} = this.state;
         return <div className={`new-profile-form-wrapper-${showNewForm ? "open" : "close"}`}>
             {showNewForm && <div className="profile-management-wrapper">
                 <div className="title"><ApiOutlined />{getIntlMessage(isNewForm ? "new_profile_title" : "edit_profile_title")}</div>
                 <Form ref={this.formRef} layout="vertical" className="new-profile-form" autoComplete={"off"}
-                    onFinish={this.onSubmitNewProfile} initialValues={currentProfile ?? undefined} onValuesChange={(val) => {
-                        val["fixVersion"] && this.setState({ requireTransportDic: val["fixVersion"] === FixVersion.FIX_5 })
-                    }}>
+                    onFinish={this.onSubmitNewProfile} initialValues={currentProfile ?? undefined}>
                     <Form.Item name="name" label={getIntlMessage("name")} rules={[{ required: true }]}>
                         <Input disabled={!isNewForm} />
                     </Form.Item>
@@ -155,7 +175,7 @@ export class ProfilePanel extends React.Component<any, ProfilePanelState> {
                         <Input />
                     </Form.Item>
                     <Form.Item name="fixVersion" label={getIntlMessage("fix_version_selector")} rules={[{ required: true }]}>
-                        <Select >
+                        <Select onChange={(e) => { this.onFixVersionChange(e) }}>
                             <Option value={FixVersion.FIX_4}>FIX 4.x</Option>
                             <Option value={FixVersion.FIX_5}>FIX 5.x</Option>
                         </Select>
@@ -163,7 +183,7 @@ export class ProfilePanel extends React.Component<any, ProfilePanelState> {
                     <Form.Item name="dictionaryLocation" label={getIntlMessage("dictionary_location")} rules={[{ required: true }]}>
                         <FileSelect label={"Browse"} />
                     </Form.Item>
-                    {requireTransportDic && <Form.Item name="transportDictionaryLocation" label={getIntlMessage("transport_dictionary_location")} rules={[{ required: true }]}>
+                    <Form.Item hidden={currentProfile ? !(currentProfile.fixVersion === FixVersion.FIX_5) : !requireTransportDic} name="transportDictionaryLocation" label={getIntlMessage("transport_dictionary_location")} rules={[{ required: true }]}>
                         <FileSelect label={"Browse"} />
                     </Form.Item>}
                     {this.getSSLForm()}

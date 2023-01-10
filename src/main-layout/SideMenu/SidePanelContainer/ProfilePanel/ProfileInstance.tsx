@@ -95,6 +95,7 @@ export class ProfileInstance extends React.Component<ProfileInstanceProps, Profi
                 {this.getField(getIntlMessage("port"), profile.port)}
                 {this.getField(getIntlMessage("hb_interval"), profile.hbInterval)}
                 {this.getField(getIntlMessage("sender_comp"), profile.senderCompId)}
+                {this.getField(getIntlMessage("api_secret"), profile.apiKeySecret?.substring(0, 16) + '...')}
                 {this.getField(getIntlMessage("ssl_enabled"), profile.sslEnabled ? "Yes" : "No")}
             </div>
             <div className="action-panel">

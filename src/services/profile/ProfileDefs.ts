@@ -13,6 +13,7 @@ export interface Profile {
     dictionaryLocation: string;
     fixVersion: FixVersion;
     transportDictionaryLocation?: string;
+    apiKeySecret?: string;
     sslEnabled?: boolean;
     sslServerName?: string;
     sslCACertificate?: string;

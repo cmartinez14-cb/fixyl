@@ -1,22 +1,29 @@
-import React, { useState } from 'react';
-import { Tooltip } from "antd";
+import React, {useState} from 'react';
+import {DatePicker, Input, Select, Tooltip} from "antd";
 import "./IgnorableInput.scss";
-import { LM } from 'src/translations/language-manager';
-import { LogoutOutlined, RollbackOutlined } from '@ant-design/icons';
-import { FixField } from 'src/services/fix/FixDefs';
-import { Select, Input, DatePicker, } from 'antd';
-import { ListInput } from '../ListInput/ListInput';
+import {LM} from 'src/translations/language-manager';
+import {LogoutOutlined, RollbackOutlined} from '@ant-design/icons';
+import {FixField} from 'src/services/fix/FixDefs';
+import {ListInput} from '../ListInput/ListInput';
 
 const { Option } = Select
 
-const FieldRenderEx = ({ value, field, required, parent, fieldIterationIndex, readOnly, secretEncoder, updaterMap, onChange}:
-    { value: any, field: FixField, required: boolean, parent: string, fieldIterationIndex: number, readOnly: boolean, secretEncoder: (parent: string, data: any, fieldIterationIndex: number)=>void, updaterMap?: Map<number, Function>, onChange: (value: any) => void}) => {
+const FieldRenderEx = ({ value, field, required, parent, fieldIterationIndex, readOnly, secretEncoder, updaterMap, eventDependencies, onChange}:
+    { value: any, field: FixField, required: boolean, parent: string, fieldIterationIndex: number, readOnly: boolean,
+        secretEncoder: (data: any, fixTag: string)=>void, updaterMap?: Map<string, Function>, eventDependencies?: Array<string>, onChange: (value: any) => void}) => {
     const [inputValue, setValue] = useState(value ? value : "");
-    updaterMap && updaterMap.set(fieldIterationIndex, setValue);
+    updaterMap && updaterMap.set(field.def.number, (value: any): void => {
+        setValue(value);
+        onChange(value);
+    });
     const onChangeEx = (value: any) => {
         setValue(value);
-        onChange(value)
-        secretEncoder && secretEncoder(parent, value, fieldIterationIndex);
+        onChange(value);
+        if (eventDependencies && secretEncoder) {
+            for (let fixTag of eventDependencies) {
+                secretEncoder(value, fixTag);
+            }
+        }
     }
 
     const { def } = field;
@@ -27,7 +34,6 @@ const FieldRenderEx = ({ value, field, required, parent, fieldIterationIndex, re
             })}
         </Select>
     }
-
 
     switch (def.type.toLowerCase()) {
         case "boolean":

@@ -1,22 +1,29 @@
 import {
-    CloseOutlined, MinusCircleOutlined, PlusOutlined,
-    SendOutlined, StarOutlined, DownOutlined, UpOutlined
+    CloseOutlined,
+    DownOutlined,
+    MinusCircleOutlined,
+    PlusOutlined,
+    SendOutlined,
+    StarOutlined,
+    UpOutlined
 } from '@ant-design/icons';
-import {Form, Input, Button, Popover, FormInstance} from 'antd';
+import {Button, Form, FormInstance, Input, Popover} from 'antd';
 import moment from 'moment';
-import React, { useRef } from 'react';
-import { IgnorableInput } from 'src/common/IgnorableInput/IgnorableInput';
-import { KeyboardEventDispatcher } from 'src/common/KeyboardEventDispatcher/KeyboardEventDispatcher';
-import { Toast } from 'src/common/Toast/Toast';
+import React, {useRef} from 'react';
+import {IgnorableInput} from 'src/common/IgnorableInput/IgnorableInput';
+import {KeyboardEventDispatcher} from 'src/common/KeyboardEventDispatcher/KeyboardEventDispatcher';
+import {Toast} from 'src/common/Toast/Toast';
 import {FixComplexType, FixField} from 'src/services/fix/FixDefs';
-import { FixMessage, FixSession } from 'src/services/fix/FixSession';
-import { GlobalServiceRegistry } from 'src/services/GlobalServiceRegistry';
-import { LM } from 'src/translations/language-manager';
+import {FixMessage, FixSession} from 'src/services/fix/FixSession';
+import {GlobalServiceRegistry} from 'src/services/GlobalServiceRegistry';
+import {LM} from 'src/translations/language-manager';
 import "./FixForm.scss";
 import {ProfileWithCredentials} from "../../../../services/profile/ProfileDefs";
-import CryptoJS from "crypto-js";
+import * as crypto from "crypto";
 
 const Mark = require("mark.js");
+
+const SHA256: string = 'sha256';
 
 const getIntlMessage = (msg: string, options?: any) => {
     return LM.getMessage(`fix_form.${msg}`, options);
@@ -96,11 +103,10 @@ interface FixFormState {
     showSearch: boolean;
     markedItems: any[];
     currentMarkedIndex?: any;
-    updaterMap: Map<number, Function>;
+    updaterMap: Map<string, Function | undefined>;
 }
 
 export class FixForm extends React.Component<FixFormProps, FixFormState> {
-    fieldIterationIndex = 0;
     private formRef: any = React.createRef<FormInstance>();
     private markInstance: any;
     private martkUpdateTimeout: any;
@@ -113,7 +119,7 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
             confirmVisible: false,
             showSearch: false,
             markedItems: [],
-            updaterMap: new Map<number, Function>()
+            updaterMap: new Map<string, Function | undefined>()
         }
     }
 
@@ -128,32 +134,35 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
     }
 
 
-    private getFieldRender = (field: FixField, required: boolean, parent: string, fieldIterationIndex: number, readOnly: boolean, secretEncoder?: (parent: string, data: any, fieldIterationIndex: number)=>void, updaterMap?: Map<number, Function>) => {
+    private getFieldRender = (field: FixField, required: boolean, parent: string, fieldIterationIndex: number, readOnly: boolean, secretEncoder?: (data: any, fixFieldNumber: string)=>void, updaterMap?: Map<string, Function|undefined>, eventDependencies?: Array<string>) => {
         const { enableIgnore } = this.props;
-        return <IgnorableInput enableIgnore={enableIgnore} componentProps={{ field, required, parent, fieldIterationIndex, readOnly, secretEncoder, updaterMap }}  />
+        return <IgnorableInput enableIgnore={enableIgnore} componentProps={{ field, required, parent, fieldIterationIndex, readOnly, secretEncoder, updaterMap, eventDependencies }}  />
     }
 
-    secretEncoder = (parent: string, data: any, fieldIterationIndex: number): void => {
-        let timestamp: string = moment(data).format("YYYY-MM-DD HH:mm:ss.mmss")
-        if (this.state.updaterMap && this.state.updaterMap.has(fieldIterationIndex)) {
+    secretEncoder = (data: any, fixTag: string): void => {
+        let timestamp: string = moment(data).utc().format("YYYYMMDD-HH:mm:ss.000")
+        if (this.state.updaterMap && this.state.updaterMap.has(fixTag)) {
             let profile: ProfileWithCredentials = this.props.session.profile;
-            let firstPart: string = timestamp+profile.senderCompId+profile.targetCompId+profile.password;
-            console.log(firstPart);
-            let encodedKey = CryptoJS.enc.Utf8.parse(profile.apiKeySecret?? '');
-            console.log(encodedKey);
-            let encrypted_secret = CryptoJS.HmacSHA256(firstPart, encodedKey);
-            let setValueFunc = this.state.updaterMap.get(fieldIterationIndex);
+
+            let preSign: string = timestamp+profile.senderCompId+profile.targetCompId+profile.password;
+
+            let key: Buffer = Buffer.from(profile.apiKeySecret?? '', 'base64');
+            let hmac: crypto.Hmac = crypto.createHmac(SHA256, key);
+            let encrypted_secret = hmac.update(Buffer.from(preSign)).digest('base64');
+
+            let setValueFunc: Function | undefined = this.state.updaterMap.get(fixTag);
             setValueFunc && setValueFunc(encrypted_secret);
         }
     }
 
     renderFields = (message: FixMessage, level: number, fieldIterationIndex: number, parent: string) => {
         return <div className="fix-field-wrapper" style={{ marginLeft: level * 10 }}>
-            {message.fields.map((field, i) => {
+            {message.fields.map((field) => {
                 const { def } = field;
                 const fieldName = `${parent}__${def.name}__${fieldIterationIndex}`;
                 let readOnly: boolean =  ('A' === message.id && "58" === field.def.number);
                 let encodesSecret: boolean = ('A' === message.id && "52" === field.def.number);
+                let eventDependencies: Array<string> = encodesSecret ? ["58"] : [];
 
                 if (this.props.removeNonFilledFields) {
                     const initialValues = this.getInitialValues();
@@ -163,8 +172,8 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
                 }
 
                 return <Form.Item name={fieldName} label={<span>{def.name}<span className="field-number">[{def.number}]</span></span>}
-                    rules={[{ required: field.required, message: 'Please input valid value!' }]} key={i} >
-                    {this.getFieldRender(field, field.required, parent, fieldIterationIndex, readOnly, encodesSecret ? this.secretEncoder : undefined, this.state.updaterMap)}
+                    rules={[{ required: field.required, message: 'Please input valid value!' }]} key={def.number} >
+                    {this.getFieldRender(field, field.required, parent, fieldIterationIndex, readOnly, encodesSecret ? this.secretEncoder : undefined, this.state.updaterMap, eventDependencies)}
                 </Form.Item>
 
             })}
@@ -421,6 +430,7 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
             root__HeartBtInt__0: hbInterval,
             root__Password__0: password,
             root__Username__0: senderCompId,
+            root__DefaultApplVerID__0: 9,
         };
     }
 

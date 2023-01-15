@@ -1,12 +1,12 @@
 import moment from 'moment';
-import { Observable, Subject, Subscription } from 'rxjs';
-import { Toast } from 'src/common/Toast/Toast';
-import { LM } from 'src/translations/language-manager';
-import { GlobalServiceRegistry } from '../GlobalServiceRegistry';
-import { ProfileWithCredentials } from '../profile/ProfileDefs';
-import { SocketInst, SocketSSLConfigs } from '../socket-management/SocketManagementSevice';
-import { FixDefinitionParser, FixMessageDef } from './FixDefinitionParser';
-import { DEFAULT_HB_INTERVAL, FixFieldDef, HBMonitor } from './FixDefs';
+import {Observable, Subject, Subscription} from 'rxjs';
+import {Toast} from 'src/common/Toast/Toast';
+import {LM} from 'src/translations/language-manager';
+import {GlobalServiceRegistry} from '../GlobalServiceRegistry';
+import {ProfileWithCredentials} from '../profile/ProfileDefs';
+import {SocketInst, SocketSSLConfigs} from '../socket-management/SocketManagementSevice';
+import {FixDefinitionParser, FixMessageDef} from './FixDefinitionParser';
+import {DEFAULT_HB_INTERVAL, FixFieldDef, HBMonitor} from './FixDefs';
 
 const { log } = console;
 
@@ -87,6 +87,10 @@ export class FixSession {
 
     getProfile(): ProfileWithCredentials {
         return this.profile;
+    }
+
+    getHeaders(fieldsTagsToInclude?: Array<string>): FixFieldDef[] {
+        return this.parser.getHeaders(fieldsTagsToInclude);
     }
 
     getAllMessageDefs(): FixMessageDef[] {

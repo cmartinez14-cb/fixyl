@@ -72,12 +72,17 @@ export class FixDefinitionParser {
                 const components: FixXmlNode = xmlObj.children.find(inst => inst.name === "components") as any;
                 const header: FixXmlNode = xmlObj.children.find(inst => inst.name === "header") as any;
 
+
+                header.children.forEach((inst) => [
+                    this.headerFields.add(inst.attributes.name)
+                ])
+
                 fields.children.forEach((inst) => {
                     const field = new FixFieldDef(inst)
                     this.fieldMap.set(field.name, field);
                 })
 
-                components.children.forEach((inst) => {
+                components && components.children.forEach((inst) => {
                     const comp = new FixComplexType(inst, this.fieldMap)
                     this.componentMap.set(comp.name, comp);
                 })
@@ -132,6 +137,18 @@ export class FixDefinitionParser {
 
     destroy() {
 
+    }
+
+    public getHeaders(fieldsTagsToInclude?: Array<string> | undefined): FixFieldDef[] {
+        let fieldNames: Set<string> = fieldsTagsToInclude ? new Set(fieldsTagsToInclude) : this.headerFields;
+        let headers: FixFieldDef[] = [];
+        if (fieldNames) {
+            fieldNames.forEach((name) => {
+                let fieldDef = this.getFieldDef(name);
+                fieldDef && headers.push(fieldDef);
+            });
+        }
+        return headers;
     }
 
     getHeaderFields() {

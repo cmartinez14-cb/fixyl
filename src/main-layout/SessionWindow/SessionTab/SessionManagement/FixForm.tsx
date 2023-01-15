@@ -13,7 +13,7 @@ import React, {useRef} from 'react';
 import {IgnorableInput} from 'src/common/IgnorableInput/IgnorableInput';
 import {KeyboardEventDispatcher} from 'src/common/KeyboardEventDispatcher/KeyboardEventDispatcher';
 import {Toast} from 'src/common/Toast/Toast';
-import {FixComplexType, FixField} from 'src/services/fix/FixDefs';
+import {FixComplexType, FixField, FixFieldDef} from 'src/services/fix/FixDefs';
 import {FixMessage, FixSession} from 'src/services/fix/FixSession';
 import {GlobalServiceRegistry} from 'src/services/GlobalServiceRegistry';
 import {LM} from 'src/translations/language-manager';
@@ -148,11 +148,35 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
 
             let key: Buffer = Buffer.from(profile.apiKeySecret?? '', 'base64');
             let hmac: crypto.Hmac = crypto.createHmac(SHA256, key);
-            let encrypted_secret = hmac.update(Buffer.from(preSign)).digest('base64');
+            let encrypted_secret: string = hmac.update(Buffer.from(preSign)).digest('base64');
 
             let setValueFunc: Function | undefined = this.state.updaterMap.get(fixTag);
             setValueFunc && setValueFunc(encrypted_secret);
         }
+    }
+
+    renderHeaders = (message: FixMessage, headerFields: Array<string>, level: number, parent: string) => {
+        let headers: FixFieldDef[] = this.props.session.getHeaders(headerFields);
+        return <div className="fix-field-wrapper" style={{ marginLeft: level * 10 }}>
+            {headers && headers.map((field) => {
+                const fieldName = `${parent}__${field.name}__${field.number}`;
+
+                if (this.props.removeNonFilledFields) {
+                    const initialValues = this.getInitialValues();
+                    if (initialValues[fieldName] === undefined) {
+                        return null
+                    }
+                }
+                let encodesSecret: boolean = ('A' === message.id && "52" === field.number);
+                let eventDependencies: Array<string> = encodesSecret ? ["58"] : [];
+
+                return <Form.Item name={fieldName} label={<span>{field.name}<span className="field-number">[{field.number}]</span></span>}
+                                   key={field.number} >
+                    {this.getFieldRender(new FixField(field, false), false, parent, 0, false, encodesSecret ? this.secretEncoder : undefined, this.state.updaterMap, eventDependencies)}
+                </Form.Item>
+
+            })}
+        </div>
     }
 
     renderFields = (message: FixMessage, level: number, fieldIterationIndex: number, parent: string) => {
@@ -160,8 +184,9 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
             {message.fields.map((field) => {
                 const { def } = field;
                 const fieldName = `${parent}__${def.name}__${fieldIterationIndex}`;
-                let readOnly: boolean =  ('A' === message.id && "58" === field.def.number);
-                let encodesSecret: boolean = ('A' === message.id && "52" === field.def.number);
+                // fields below can be pulled out as external configs to drive the form's rendering
+                let readOnly: boolean =  ('A' === message.id && "58" === def.number);
+                let encodesSecret: boolean = ('A' === message.id && "52" === def.number);
                 let eventDependencies: Array<string> = encodesSecret ? ["58"] : [];
 
                 if (this.props.removeNonFilledFields) {
@@ -606,7 +631,11 @@ export class FixForm extends React.Component<FixFormProps, FixFormState> {
                 </div>}
                 {initialized && <Form ref={this.formRef} layout="horizontal" initialValues={this.getInitialValues()} labelCol={{ span: 10 }} labelAlign="left" onFinish={this.onFinished}>
                     <div className="form-body" id={`search-node${name}`}>
-                        {this.renderFormFields(message, 0, 0, "root")}
+                        {'A' === message.id && this.renderHeaders(message, ['SendingTime'],0, "root")}
+                        {this.renderFields(message, 0, 0, "root")}
+                        {message.group && this.renderGroups(message.group, 0, "root")}
+                        {message.components.map(comp => this.renderComponents(comp, 0, "root"))}
+
                     </div>
                     {!viewOnly && <div className="form-footer">
                         {!saveMode && <React.Fragment>
